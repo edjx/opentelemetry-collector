@@ -38,7 +38,6 @@ func MetricsToOC(md pdata.Metrics) []consumerdata.MetricsData {
 	resourceMetrics := md.ResourceMetrics()
 
 	if resourceMetrics.Len() == 0 {
-		println(">>>>>>>>  nil")
 		return nil
 	}
 
