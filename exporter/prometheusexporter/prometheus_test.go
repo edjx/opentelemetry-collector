@@ -141,7 +141,7 @@ func TestPrometheusExporter_endToEndWithTimestamps(t *testing.T) {
 	factory := NewFactory()
 	creationParams := component.ExporterCreateParams{Logger: zap.NewNop()}
 	exp, err := factory.CreateMetricsExporter(context.Background(), creationParams, config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		require.NoError(t, exp.Shutdown(context.Background()))

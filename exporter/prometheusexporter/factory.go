@@ -53,7 +53,7 @@ func createDefaultConfig() configmodels.Exporter {
 
 func createMetricsExporter(
 	_ context.Context,
-	_ component.ExporterCreateParams,
+	params component.ExporterCreateParams,
 	cfg configmodels.Exporter,
 ) (component.MetricsExporter, error) {
 	pcfg := cfg.(*Config)
@@ -88,11 +88,19 @@ func createMetricsExporter(
 		_ = srv.Serve(ln)
 	}()
 
+	closeChan := make(chan struct{})
+
 	pexp := &prometheusExporter{
-		name:         cfg.Name(),
-		exporter:     pe,
-		shutdownFunc: ln.Close,
+		name:      cfg.Name(),
+		exporter:  pe,
+		closeChan: closeChan,
 	}
 
-	return pexp, nil
+	return exporterhelper.NewMetricsExporter(cfg, params.Logger, pexp.PushMetrics,
+		exporterhelper.WithResourceToTelemetryConversion(pcfg.ResourceToTelemetryConversion),
+		exporterhelper.WithShutdown(func(ctx context.Context) error {
+			close(closeChan)
+			return ln.Close()
+		}),
+	)
 }

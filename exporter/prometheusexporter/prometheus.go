@@ -22,9 +22,11 @@ import (
 	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 	// TODO: once this repository has been transferred to the
 	// official census-ecosystem location, update this import path.
+
 	"github.com/orijtech/prometheus-go-metrics-exporter"
 
-	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenterror"
+	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/internaldata"
 )
@@ -32,27 +34,40 @@ import (
 var errBlankPrometheusAddress = errors.New("expecting a non-blank address to run the Prometheus metrics handler")
 
 type prometheusExporter struct {
-	name         string
-	exporter     *prometheus.Exporter
-	shutdownFunc func() error
+	name      string
+	exporter  *prometheus.Exporter
+	closeChan chan struct{}
 }
 
-func (pe *prometheusExporter) Start(_ context.Context, _ component.Host) error {
-	return nil
-}
-
-func (pe *prometheusExporter) ConsumeMetrics(ctx context.Context, md pdata.Metrics) error {
+func (pe *prometheusExporter) PushMetrics(ctx context.Context, md pdata.Metrics) (int, error) {
 	ocmds := internaldata.MetricsToOC(md)
+	var errs []error
+	dropped := 0
+
+	select {
+	case <-pe.closeChan:
+		return md.MetricCount(), errors.New("shutdown has been called")
+	default:
+	}
+
 	for _, ocmd := range ocmds {
 		merged := make(map[string]*metricspb.Metric)
 		for _, metric := range ocmd.Metrics {
 			merge(merged, metric)
 		}
 		for _, metric := range merged {
-			_ = pe.exporter.ExportMetric(ctx, ocmd.Node, ocmd.Resource, metric)
+			if err := pe.exporter.ExportMetric(ctx, ocmd.Node, ocmd.Resource, metric); err != nil {
+				dropped++
+				errs = append(errs, consumererror.Permanent(err))
+			}
 		}
 	}
-	return nil
+
+	if dropped != 0 {
+		return dropped, componenterror.CombineErrors(errs)
+	}
+
+	return 0, nil
 }
 
 // The underlying exporter overwrites timeseries when there are conflicting metric signatures.
@@ -77,9 +92,4 @@ func metricSignature(metric *metricspb.Metric) string {
 		buf.WriteString("-" + labelKey.Key)
 	}
 	return buf.String()
-}
-
-// Shutdown stops the exporter and is invoked during shutdown.
-func (pe *prometheusExporter) Shutdown(context.Context) error {
-	return pe.shutdownFunc()
 }

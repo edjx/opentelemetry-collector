@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"go.opentelemetry.io/collector/config/configmodels"
+	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
 // Config defines configuration for Prometheus exporter.
@@ -34,5 +35,6 @@ type Config struct {
 	ConstLabels prometheus.Labels `mapstructure:"const_labels"`
 
 	// SendTimestamps will send the underlying scrape timestamp with the export
-	SendTimestamps bool `mapstructure:"send_timestamps"`
+	SendTimestamps                bool                                       `mapstructure:"send_timestamps"`
+	ResourceToTelemetryConversion exporterhelper.ResourceToTelemetrySettings `mapstructure:"resource_to_telemetry_conversion"`
 }
