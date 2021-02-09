@@ -46,8 +46,15 @@ type HTTPClientSettings struct {
 	// Existing header values are overwritten if collision happens.
 	Headers map[string]string `mapstructure:"headers,omitempty"`
 
+	BasicAuth HTTPBasicAuthSettings `mapstructure:"basic_auth,omitempty"`
+
 	// Custom Round Tripper to allow for individual components to intercept HTTP requests
 	CustomRoundTripper func(next http.RoundTripper) (http.RoundTripper, error)
+}
+
+type HTTPBasicAuthSettings struct {
+	Username string `mapstructure:"username,omitempty"`
+	Password string `mapstructure:"password,omitempty"`
 }
 
 func (hcs *HTTPClientSettings) ToClient() (*http.Client, error) {
@@ -71,6 +78,13 @@ func (hcs *HTTPClientSettings) ToClient() (*http.Client, error) {
 		clientTransport = &headerRoundTripper{
 			transport: transport,
 			headers:   hcs.Headers,
+		}
+	}
+
+	if hcs.BasicAuth.Username != "" {
+		clientTransport = &basicAuthRoundTripper{
+			transport:             clientTransport,
+			HTTPBasicAuthSettings: hcs.BasicAuth,
 		}
 	}
 
@@ -99,6 +113,17 @@ func (interceptor *headerRoundTripper) RoundTrip(req *http.Request) (*http.Respo
 		req.Header.Set(k, v)
 	}
 	// Send the request to next transport.
+	return interceptor.transport.RoundTrip(req)
+}
+
+type basicAuthRoundTripper struct {
+	transport http.RoundTripper
+	HTTPBasicAuthSettings
+}
+
+func (interceptor *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(interceptor.Username, interceptor.Password)
+
 	return interceptor.transport.RoundTrip(req)
 }
 
